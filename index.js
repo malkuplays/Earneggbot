@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { Bot, InlineKeyboard, GrammyError, HttpError } = require('grammy');
 const express = require('express');
+const https = require('https');
 
 // Initialize the bot
 const bot = new Bot(process.env.BOT_TOKEN || '');
@@ -27,8 +28,27 @@ app.get('/', (req, res) => {
   res.send('Earnegg Bot is running! 🚀');
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is listening on port ${PORT}`);
+  
+  // Keep the bot alive by pinging its own URL every 5 minutes (Render free tier)
+  const RENDER_URL = process.env.RENDER_URL;
+  if (RENDER_URL) {
+    console.log(`Self-pinging ${RENDER_URL} enabled (5 min interval)...`);
+    setInterval(() => {
+      https.get(RENDER_URL, (res) => {
+        if (res.statusCode === 200) {
+          console.log(`[${new Date().toISOString()}] Self-ping successful: ${res.statusCode}`);
+        } else {
+          console.warn(`[${new Date().toISOString()}] Self-ping returned non-200 status: ${res.statusCode}`);
+        }
+      }).on('error', (err) => {
+        console.error(`[${new Date().toISOString()}] Self-ping failed:`, err.message);
+      });
+    }, 5 * 60 * 1000); // Ping every 5 minutes
+  } else {
+    console.warn("RENDER_URL is not set. Self-pinging is disabled. Bot might go to sleep on Render free tier.");
+  }
 });
 
 // Menu Content Constants
@@ -61,6 +81,13 @@ bot.command('openapp', (ctx) => {
   ctx.reply('🚀 *Launching Earnegg...*', {
     parse_mode: 'Markdown',
     reply_markup: new InlineKeyboard().url('🎮 Open App', 'https://t.me/earneggbot/earneager?startapp=ref_673756514'),
+  });
+});
+
+bot.command('status', (ctx) => {
+  const status = process.env.RENDER_URL ? "🟢 Live (Self-ping active)" : "🟡 Live (Self-ping inactive)";
+  ctx.reply(`🤖 *Bot Status:* ${status}\n🔗 *URL:* ${process.env.RENDER_URL || "Not set"}`, {
+    parse_mode: 'Markdown'
   });
 });
 
